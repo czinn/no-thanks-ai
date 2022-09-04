@@ -83,10 +83,6 @@ impl NoThanksGame {
         }
     }
 
-    fn advance_turn(&mut self) {
-        self.active_player = (self.active_player + 1) % self.player_tokens.len();
-    }
-
     fn is_terminal(&self) -> bool {
         self.cards_taken >= NUM_CARDS - DISCARDED_CARDS
     }
@@ -157,7 +153,7 @@ impl GameState for NoThanksGame {
             Move::Pass => {
                 self.active_tokens += 1;
                 self.player_tokens[self.active_player] -= 1;
-                self.advance_turn();
+                self.active_player = (self.active_player + 1) % self.player_tokens.len();
             },
             Move::Take => {
                 self.player_tokens[self.active_player] += self.active_tokens;
@@ -165,7 +161,6 @@ impl GameState for NoThanksGame {
                 self.card_owners[self.active_card.unwrap()] = Some(self.active_player);
                 self.active_card = None;
                 self.cards_taken += 1;
-                self.advance_turn();
             },
         }
     }
