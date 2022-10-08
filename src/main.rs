@@ -4,6 +4,7 @@ use std::fmt;
 
 use rand::prelude::*;
 
+use clap::{Parser, Subcommand};
 use mcts::*;
 use mcts::tree_policy::*;
 use mcts::transposition_table::*;
@@ -11,7 +12,7 @@ use mcts::transposition_table::*;
 const LOW_CARD: usize = 3;
 const HIGH_CARD: usize = 35;
 const DISCARDED_CARDS: usize = 9;
-const NUM_CARDS: usize = HIGH_CARD - LOW_CARD;
+const NUM_CARDS: usize = HIGH_CARD - LOW_CARD + 1;
 
 #[derive(Clone, Debug, PartialEq, Hash)]
 struct NoThanksGame {
@@ -36,7 +37,8 @@ impl fmt::Display for NoThanksGame {
             None => (),
         }
         for (i, tokens) in self.player_tokens.iter().enumerate() {
-            write!(f, "Player {} ({} tokens): ", i, tokens)?;
+            write!(f, "{}Player {} ({} tokens): ",
+                    if self.active_player == i { "*" } else { "" }, i, tokens)?;
             for (card, owner) in self.card_owners.iter().enumerate() {
                 match *owner {
                     None => (),
@@ -211,8 +213,29 @@ impl MCTS for MyMCTS {
     }
 }
 
-fn main() {
-    let mut game = NoThanksGame::new(3);
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[clap(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    SelfPlay {
+        #[arg(short, long)]
+        players: usize,
+    },
+    WithHumans {
+        #[arg(short, long)]
+        players: usize,
+        #[arg(short, long)]
+        which_player: usize,
+    },
+}
+
+fn self_play(players: usize) {
+    let mut game = NoThanksGame::new(players);
     let mut rng = rand::thread_rng();
     while !game.is_terminal() {
         match game.current_player() {
@@ -239,4 +262,72 @@ fn main() {
 
     println!("{}", game);
     println!("{:?}", game.compute_scores());
+}
+
+fn get_line() -> String {
+    let mut buffer = String::new();
+    std::io::stdin().read_line(&mut buffer).unwrap();
+    buffer
+}
+
+fn with_humans(players: usize, which_player: usize) {
+    let mut game = NoThanksGame::new(players);
+    let mut game_at_last_card = game.clone();
+    while !game.is_terminal() {
+        match game.current_player() {
+            Player::Random => {
+                println!("Enter next card:");
+                let card = get_line().trim().parse::<usize>().unwrap();
+                game.make_move(&Move::NextCard(card - 3));
+                game_at_last_card = game.clone();
+                println!("{}", game);
+            }
+            Player::Player(i) => {
+                let found_best_move =
+                    if i == which_player {
+                        let mut mcts = MCTSManager::new(game.clone(), MyMCTS, MyEvaluator, UCTPolicy::new(0.5), ApproxTable::new(1024));
+                        mcts.playout_n_parallel(1000000, 8);
+                        let best_move = mcts.best_move().unwrap();
+                        match best_move {
+                            Move::NextCard(_) => panic!("impossible"),
+                            Move::Pass => {
+                                game.make_move(&Move::Pass);
+                                false
+                            },
+                            Move::Take => {
+                                println!("Take at {} tokens\n", game.active_tokens);
+                                true
+                            }
+                        }
+                    } else {
+                        if game.player_tokens[game.active_player] == 0 {
+                            game.make_move(&Move::Take);
+                            println!("Never take\n");
+                            true
+                        } else {
+                            game.make_move(&Move::Pass);
+                            false
+                        }
+                    };
+                if found_best_move {
+                    println!("When was card taken:");
+                    let tokens = get_line().trim().parse::<usize>().unwrap();
+                    while game_at_last_card.active_tokens < tokens {
+                        game_at_last_card.make_move(&Move::Pass);
+                    }
+                    game_at_last_card.make_move(&Move::Take);
+                    game = game_at_last_card.clone();
+                }
+            },
+        }
+    }
+}
+
+fn main() {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Command::SelfPlay { players } => self_play(players),
+        Command::WithHumans { players, which_player } => with_humans(players, which_player),
+    }
 }
