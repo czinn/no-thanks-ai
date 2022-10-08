@@ -264,10 +264,19 @@ fn self_play(players: usize) {
     println!("{:?}", game.compute_scores());
 }
 
-fn get_line() -> String {
-    let mut buffer = String::new();
-    std::io::stdin().read_line(&mut buffer).unwrap();
-    buffer
+fn get_input_number() -> usize {
+    loop {
+        let mut buffer = String::new();
+        match std::io::stdin().read_line(&mut buffer) {
+            Ok(_) => {
+                match buffer.trim().parse::<usize>() {
+                    Ok(n) => break n,
+                    Err(_) => println!("Enter a number:"),
+                }
+            },
+            Err(_) => println!("Enter a number:"),
+        }
+    }
 }
 
 fn with_humans(players: usize, which_player: usize) {
@@ -277,7 +286,7 @@ fn with_humans(players: usize, which_player: usize) {
         match game.current_player() {
             Player::Random => {
                 println!("Enter next card:");
-                let card = get_line().trim().parse::<usize>().unwrap();
+                let card = get_input_number();
                 game.make_move(&Move::NextCard(card - 3));
                 game_at_last_card = game.clone();
                 println!("{}", game);
@@ -311,7 +320,7 @@ fn with_humans(players: usize, which_player: usize) {
                     };
                 if found_best_move {
                     println!("When was card taken:");
-                    let tokens = get_line().trim().parse::<usize>().unwrap();
+                    let tokens = get_input_number();
                     while game_at_last_card.active_tokens < tokens {
                         game_at_last_card.make_move(&Move::Pass);
                     }
@@ -321,6 +330,9 @@ fn with_humans(players: usize, which_player: usize) {
             },
         }
     }
+
+    println!("{}", game);
+    println!("{:?}", game.compute_scores());
 }
 
 fn main() {
